@@ -36,9 +36,12 @@ jobs:
           python -m playwright install --with-deps chromium
 
       - name: Check stock or send test
-        env:
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          TEST_ALERT: ${{ inputs.test_alert }}
+        
+env:
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  TEST_ALERT: ${{ inputs.test_alert }}
+  
         run: |
           if [ "$TEST_ALERT" = 'true' ]; then
             python ps5_pro_monitor.py --test-alert
