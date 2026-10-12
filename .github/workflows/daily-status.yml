@@ -1,0 +1,75 @@
+
+name: PS5 Pro daily status
+
+on:
+  schedule:
+    - cron: '17 14 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  daily-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright requests
+          python -m playwright install --with-deps chromium
+
+      - name: Check stock and send daily Telegram report
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python - <<'PY'
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          from playwright.sync_api import sync_playwright
+          from ps5_pro_monitor import status, notify
+          import os
+
+          today = datetime.now(
+              ZoneInfo('America/New_York')
+          ).strftime('%b %d, %Y at %I:%M %p ET')
+
+          try:
+              with sync_playwright() as p:
+                  browser = p.chromium.launch(headless=True)
+                  try:
+                      page = browser.new_page(
+                          locale='en-US',
+                          viewport={'width': 1200, 'height': 900}
+                      )
+                      result = status(page)
+                  finally:
+                      browser.close()
+
+              messages = {
+                  'OUT_OF_STOCK': '📦 PS5 Pro: Out of stock',
+                  'BUY_BUTTON': '⚠️ PS5 Pro: Possible availability — verify on PlayStation Direct',
+                  'UNKNOWN': '⚠️ PS5 Pro: Could not determine availability',
+              }
+              detail = messages.get(
+                  result, '⚠️ Unexpected stock check result'
+              )
+              print('Daily stock check result:', result)
+
+          except Exception as exc:
+              detail = '⚠️ Stock check failed. See GitHub Actions logs.'
+              print('Daily stock check error:', repr(exc))
+
+          notify(
+              'Daily check: ' + today + '\n' + detail +
+              '\n\nThis checks the store now; it does not verify every 10-minute scheduled run.',
+              os.environ['TELEGRAM_BOT_TOKEN'],
+              os.environ['TELEGRAM_CHAT_ID']
+          )
+          PY
